@@ -1,0 +1,16 @@
+{
+  "name": "cellcam-signaling",
+  "version": "0.1.0",
+  "description": "Servidor de sinalização WebSocket local para o CellCam",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

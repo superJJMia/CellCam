@@ -1,0 +1,7 @@
+aiortc>=1.6.0
+websockets>=12.0
+numpy>=1.26
+av>=12.0
+pyvirtualcam>=0.14.0
+qrcode[pil]>=7.4
+pillow>=10.0

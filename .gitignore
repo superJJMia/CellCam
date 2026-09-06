@@ -1,0 +1,22 @@
+# Python
+desktop/.venv/
+__pycache__/
+*.pyc
+
+# Node
+server/node_modules/
+
+# Android / Gradle
+mobile/.gradle/
+mobile/build/
+mobile/app/build/
+mobile/local.properties
+*.apk
+*.aab
+
+# Logs e artefatos gerados em execução
+desktop/*.log
+desktop/qr.png
+
+# Pasta residual de desinstalação (removida no próximo boot)
+vendor_removing/

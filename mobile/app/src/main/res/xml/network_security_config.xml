@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Permite HTTP (e WS :8081) na rede local para o servidor de sinalização -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

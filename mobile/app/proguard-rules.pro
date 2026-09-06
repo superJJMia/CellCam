@@ -1,0 +1,1 @@
+# Webrtc-sdk mantém o código org.webrtc, nenhuma regra extra necessária por padrão.
