@@ -66,6 +66,8 @@ class WebRtcSender(
     val localVideoTrack: VideoTrack?
         get() = videoTrack
 
+    fun eglContext(): EglBase.Context = eglBase.eglBaseContext
+
     fun start() {
         initializeFactory()
     }

@@ -20,8 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.webrtc.EglBase
-import org.webrtc.RendererCommon
 import org.webrtc.VideoTrack
 
 class MainActivity : AppCompatActivity() {
@@ -29,7 +27,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var signaling: SignalingClient? = null
     private var webRtc: WebRtcSender? = null
-    private var eglBase: EglBase? = null
+    private var preview: TexturePreviewRenderer? = null
     private var mdnsDiscovery: MdnsDiscovery? = null
 
     // Estado da sessão
@@ -62,7 +60,6 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupPreview()
         setupButtons()
         applyOrientationLayout()
 
@@ -74,19 +71,6 @@ binding.statusText.text = "Basta tocar em CONECTAR."
         } else {
             cameraPermission.launch(Manifest.permission.CAMERA)
         }
-    }
-
-    private fun setupPreview() {
-        if (eglBase != null) return
-        eglBase = EglBase.create()
-        initLocalPreview()
-    }
-
-    private fun initLocalPreview() {
-        binding.localPreview.init(eglBase!!.eglBaseContext, null)
-        binding.localPreview.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-        binding.localPreview.setMirror(mirrorEnabled)
-        binding.localPreview.setZOrderMediaOverlay(true)
     }
 
     private fun setupButtons() {
@@ -104,7 +88,7 @@ binding.statusText.text = "Basta tocar em CONECTAR."
 
         binding.mirrorButton.setOnClickListener {
             mirrorEnabled = !mirrorEnabled
-            binding.localPreview.setMirror(mirrorEnabled)
+            preview?.setMirror(mirrorEnabled)
             webRtc?.setMirror(mirrorEnabled)
         }
 
@@ -366,7 +350,6 @@ binding.statusText.text = "Basta tocar em CONECTAR."
 
     private fun startWebRtc() {
         if (initiated.not()) return
-        setupPreview()
 
         if (webRtc != null) {
             if (webRtc?.isStreaming == true) {
@@ -416,8 +399,14 @@ binding.statusText.text = "Basta tocar em CONECTAR."
     }
 
     private fun showLocalPreview() {
-        val track = webRtc?.localVideoTrack ?: return
-        track.addSink(binding.localPreview)
+        val sender = webRtc ?: return
+        val track = sender.localVideoTrack ?: return
+        preview?.release()
+        preview = TexturePreviewRenderer(binding.localPreview, sender.eglContext()).apply {
+            init()
+            setMirror(mirrorEnabled)
+        }
+        track.addSink(preview!!)
         binding.localPreview.visibility = View.VISIBLE
     }
 
@@ -432,7 +421,11 @@ binding.statusText.text = "Basta tocar em CONECTAR."
         signaling = null
         mdnsDiscovery?.stop()
         mdnsDiscovery = null
-        webRtc?.localVideoTrack?.removeSink(binding.localPreview)
+        webRtc?.localVideoTrack?.let { track ->
+            preview?.let { track.removeSink(it) }
+        }
+        preview?.release()
+        preview = null
         webRtc?.stop()
         webRtc = null
 
@@ -448,7 +441,6 @@ binding.statusText.text = "Basta tocar em CONECTAR."
         binding.rotateButton.isEnabled = false
         binding.connectButton.text = "CONECTAR E TRANSMITIR"
         binding.connectButton.isEnabled = true
-        binding.localPreview.clearImage()
         binding.localPreview.visibility = View.GONE
         binding.statusText.text = "Basta tocar em CONECTAR."
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -486,8 +478,11 @@ binding.statusText.text = "Basta tocar em CONECTAR."
         super.onDestroy()
         mdnsDiscovery?.stop()
         signaling?.close()
+        webRtc?.localVideoTrack?.let { track ->
+            preview?.let { track.removeSink(it) }
+        }
+        preview?.release()
+        preview = null
         webRtc?.stop()
-        runCatching { binding.localPreview.release() }
-        eglBase?.release()
     }
 }
