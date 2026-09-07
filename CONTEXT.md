@@ -1,7 +1,7 @@
 # CellCam — Contexto do Projeto
 
 > Arquivo de contexto mantido pelo opencode. Atualizar a cada mudança e commitar junto.
-> Última atualização: 2026-09-06 (sessão de lapidação + auto-descoberta).
+> Última atualização: 2026-09-06 (sessão de lapidação + auto-descoberta + decisão WiFi/cabo).
 
 ## Estado atual (o que funciona)
 - Pipeline **completo e validado ponta-a-ponta**:
@@ -10,7 +10,7 @@
 - **Controles no app**: Parar/Conectar, trocar câmera, **Espelho**, **Girar 90°** (aplicado no PC; preview do celular só espelha, por decisão do usuário).
 - **Reconexão automática** dos dois lados (app e receiver) com backoff.
 - **Qualidade de vídeo estável**: webcam virtual com tamanho fixo (letterbox); não muda mais de resolução sem aviso.
-- **Auto-descoberta**: o desktop publica `cellcam._cellcam._tcp` (mDNS/zeroconf); o app encontra o PC por WiFi ou cabo USB sem digitar IP (com fallback de varredura de subrede — o NsdManager do moto G7 está com bug).
+- **Auto-descoberta**: o desktop publica `cellcam._cellcam._tcp` (mDNS/zeroconf); o app encontra o PC por WiFi (transporto principal da mídia) sem digitar IP (com fallback de varredura de subrede — o NsdManager do moto G7 está com bug).
 
 ## Decisões técnicas
 - Transporte: WebRTC/H.264 (aiortc 1.15.0 + libwebrtc Android M137).
@@ -21,7 +21,8 @@
 - Estabilização de dimensão no receiver: `_target_size` fixado no primeiro frame e **mantido entre sessões do mesmo processo**; `_fit_letterbox` (Pillow LANCZOS + canvas) redimensiona sem distorcer — a resolução da webcam virtual nunca muda durante a operação.
 - Estado de espelho persistente no receiver (`self._mirror`), preservado ao recriar a `CameraBridge` (evita dessincronização com o app).
 - mDNS desktop: `zeroconf` + `psutil` em **thread própria** (o `register_service` síncrono do zeroconf 0.151 conflita com o event loop principal → `EventLoopBlocked`; por isso `asyncio.run` em thread dedicada com APIs async).
-- Descoberta Android: preferência **cabo USB primeiro** (TRANSPORT_USB/interface rndis-usb-eth), depois WiFi. Campo de IP manual continua funcionando (ex.: `192.168.0.119`).
+- Descoberta Android: preferência **WiFi primeiro** (transporte definitivo da mídia), depois cabo USB/rede móvel. Detecção com **bind dos sockets à `Network`** coletada via `ConnectivityManager.allNetworks` (necessário quando a rede não é a "default"). Campo de IP manual continua funcionando (ex.: `192.168.0.119`).
+- **Cabo USB arquivado** (decisão do usuário): o Android 10 (moto G7) só registra a rede `rndis0` no `ConnectivityManager` quando o tethering tem um **upstream** (WiFi ou dados móveis); sem ele, o app vê "nenhuma rede ativa". Com WiFi ativo, o libwebrtc não expõe a interface `rndis0` como candidato ICE → a mídia obrigatoriamente vai por WiFi. Conclusão: cabo demandaria WiFi off + dados móveis on; o usuário optou por manter WiFi como transporte e arquivar o cabo.
 
 ## Ambiente
 - Windows; JDK 17 Temurin; Android SDK (platform-tools, android-34); Node 24; Python 3.12.10 (venv `desktop/.venv`).
@@ -30,7 +31,7 @@
 
 ## Bugs/fixes conhecidos (importantes)
 - aiortc 1.15: sem evento `icecandidate` — candidatos vêm no SDP após `setLocalDescription`; trickle via `candidate_from_sdp`.
-- **mDNS no Android 10 (moto G7)**: `NsdManager.onStartDiscoveryFailed(0)` persistente (falha interna do aparelho, comum em API 29). Contorno: app faz retry, e se falhar ou demorar, **varre a subrede local** (TCP porta 8081, ~40 paralelos, cabo USB primeiro) até achar o desktop.
+- **mDNS no Android 10 (moto G7)**: `NsdManager.onStartDiscoveryFailed(0)` persistente (falha interna do aparelho, comum em API 29). Contorno: app faz retry, e se falhar ou demorar, **varre a subrede local** (TCP porta 8081, ~40 paralelos, **WiFi primeiro**) até achar o desktop.
 - Receiver: `CameraBridge` NÃO recria a webcam por mudança de resolução (letterbox resolve); só recria no `_reset` preservando `mirror`.
 - Track sender deve retornar `av.VideoFrame` com `pts`/`time_base` (API do aiortc 1.15).
 - Build Android com Gradle é lento/teimoso com caching: usar `clean` se necessário (`assembleDebug` com `*>` redirect para log).
@@ -39,14 +40,15 @@
 ## Riscos pendentes
 - App Câmera do Windows e Gerenciador de Dispositivos **não** listam câmeras virtuais (limitações do Windows; OBS/Meet/Teams/Zoom/Discord funcionam).
 - mDNS do moto G7 depende do fallback de varredura (funciona, mas é mais lento ~2-6s; o mDNS continua primeiro em aparelhos sem o bug).
-- Com cabo USB + WiFi ativos, ICE pode escolher rota WiFi para a mídia mesmo com signaling por cabo (prioridade do dispositivo; aceitável).
+- Com WiFi com sinal fraco, a qualidade do vídeo pode sofrer (não há mais o cabo como alternativa de mídia — arquivado).
 
 ## Próximos passos
 1. Validar no app consumidor real (Meet/Teams/Zoom) selecionando "OBS Virtual Camera".
-2. Fase 1 restante: melhorar resolução (720p+) e estabilidade; revisar prioridade de rota ICE por cabo.
+2. Fase 1 restante: melhorar resolução (720p+) e estabilidade da mídia via WiFi.
 3. Fase 2: filtros/efeitos (decisão de lib) e Fase 3: refinamentos/instaladores.
 
 ## Histórico (cronológico)
 - 2026-09-06 — Fase 1 MVP concluída e commitada (`a0f1bf0`): toolchain, signaling Node.js (7/7 testes), app Android (~50MB), receptor Python (dry/obs/unitycapture + QR), ajustes E2E aiortc 1.15, OBS Virtual Camera validada, GitHub público https://github.com/superJJMia/CellCam. Docs `AGENTS.md`/`CONTEXT.md` commitados (`727c9fa`).
 - 2026-09-06 — **Lapidação Fase 1** (a commitar): UX do app (Parar, trocar câmera, espelho, girar, manter tela ativa), reconexão automática com backoff (1s→10s) + renegociação WebRTC, espelho e giro E2E via signaling (espelho antes do giro), resolução da webcam fixa (letterbox), tamanho nunca muda, start.cmd e README.
-- 2026-09-06 — **Auto-descoberta do desktop** (a commitar): mDNS (zeroconf `cellcam._cellcam._tcp`, thread própria) + app com descoberta (mDNS com retry → fallback varredura de subrede, cabo USB primeiro), porta personalizável no `SignalingClient`, `CHANGE_WIFI_MULTICAST_STATE`.
+- 2026-09-06 — **Auto-descoberta do desktop** (commitado junto): mDNS (zeroconf `cellcam._cellcam._tcp`, thread própria) + app com descoberta (mDNS com retry → fallback varredura de subrede), porta personalizável no `SignalingClient`, `CHANGE_WIFI_MULTICAST_STATE`, bind de sockets por `Network` (`ConnectivityManager`).
+- 2026-09-06 — **Cabo USB arquivado / WiFi definitivo**: diagnóstico provou que no Android 10 a rede `rndis0` só existe para apps com upstream (WiFi/dados móveis) e o libwebrtc não gera candidato ICE na interface USB com WiFi ativo. Digitação: mídia por cabo só com WiFi off + dados móveis on. Usuário decidiu manter WiFi como transporte da mídia; descoberta prioriza WiFi (rank 0).

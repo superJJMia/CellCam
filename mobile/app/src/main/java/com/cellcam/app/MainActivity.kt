@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
                     var connected = false
                     for (server in servers) {
                         if (!initiated) return@launch
-                        val meio = if (server.preferUsb) "cabo USB" else "WiFi"
+                        val meio = if (server.preferWifi) "WiFi" else "cabo USB"
                         binding.statusText.text = "Verificando ${server.ip} ($meio)..."
                         if (tcpReachable(server.ip, server.port)) {
                             connected = true
