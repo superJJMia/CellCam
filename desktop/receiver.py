@@ -23,11 +23,8 @@ class CameraBridge:
         self.fps = fps
         self.cam: pyvirtualcam.Camera | None = None
         self.frame_count = 0
-        self.mirror = False
 
     def send(self, frame: np.ndarray):
-        if self.mirror:
-            frame = frame[:, ::-1, :]
         if self.backend == "dry":
             self.frame_count += 1
             return
@@ -190,8 +187,7 @@ class Receiver:
         if self._mirror == enabled:
             return
         self._mirror = enabled
-        self.bridge.mirror = enabled
-        logger.info("Espelho vertical (mirror) aplicado no fluxo" if enabled else "Espelho desativado")
+        logger.info("Espelho horizontal aplicado no fluxo" if enabled else "Espelho desativado")
 
     async def set_rotate(self, degrees: int):
         """Gira o fluxo em 90°, 180° ou 270° (antes do espelho)."""
@@ -253,9 +249,8 @@ class Receiver:
             self.pc = None
         if self.bridge.frame_count:
             self.bridge.close()
-            # recria para a proxima sessao, preservando o estado de espelho
+            # recria para a proxima sessao
             self.bridge = CameraBridge(backend=self.bridge.backend, fps=self.bridge.fps)
-            self.bridge.mirror = self._mirror
 
     async def close(self):
         await self._reset()
