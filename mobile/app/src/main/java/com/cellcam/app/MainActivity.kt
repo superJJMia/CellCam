@@ -45,7 +45,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            binding.statusText.text = "Câmera liberada. A descoberta é automática."
+            binding.statusText.text = "Basta tocar em CONECTAR."
             binding.connectButton.isEnabled = true
         } else {
             binding.statusText.text = "Permissão de câmera negada."
@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            binding.statusText.text = "Tocando em CONECTAR, a descoberta é automática."
+binding.statusText.text = "Basta tocar em CONECTAR."
             binding.connectButton.isEnabled = true
         } else {
             cameraPermission.launch(Manifest.permission.CAMERA)
