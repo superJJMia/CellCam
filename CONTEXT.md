@@ -1,13 +1,14 @@
 # CellCam — Contexto do Projeto
 
 > Arquivo de contexto mantido pelo opencode. Atualizar a cada mudança e commitar junto.
-> Última atualização: 2026-09-06 (sessão de lapidação + auto-descoberta + decisão WiFi/cabo).
+> Última atualização: 2026-09-06 (sessão de lapidação + auto-descoberta + sala automática + nova UI).
 
 ## Estado atual (o que funciona)
 - Pipeline **completo e validado ponta-a-ponta**:
   celular Android → WebRTC/H.264 → signaling local → receptor Python (aiortc) → decodifica → **OBS Virtual Camera** → visível em apps (validado visualmente no OBS).
 - Backend de webcam padrão: **`obs`** (`desktop/main.py`). Unity Capture foi testado, **removido** (placeholder verde) e desinstalado.
 - **Controles no app**: Parar/Conectar, trocar câmera, **Espelho**, **Girar 90°** (aplicado no PC; preview do celular só espelha, por decisão do usuário).
+- **UI reestilizada** (paleta ciano-tech, sem temática sith): referência `super-mia-chi.vercel.app` mas com accent `#22E0FF` (ciano) sobre fundo quase preto; título em `sans-serif-black` + subtítulo em `monospace` (letter-spacing amplo, texto em caixa alta, painéis com borda fina `#1E2A38`). Campos de IP/sala saíram da tela principal; descoberta automática com 1 desktop conecta direto, com vários mostra **lista expansível "Dispositivos encontrados"**; conexão manual foi movida para o painel expansível **"Avançado"**.
 - **Reconexão automática** dos dois lados (app e receiver) com backoff.
 - **Qualidade de vídeo estável**: webcam virtual com tamanho fixo (letterbox); não muda mais de resolução sem aviso.
 - **Auto-descoberta**: o desktop publica `cellcam._cellcam._tcp` (mDNS/zeroconf) com o **código da sala no TXT**; o app encontra o PC por WiFi (transporte principal da mídia) sem digitar IP **nem código** (fallback de varredura de subrede + `GET /api/room` — o NsdManager do moto G7 está com bug).
@@ -54,3 +55,4 @@
 - 2026-09-06 — **Auto-descoberta do desktop** (commitado junto): mDNS (zeroconf `cellcam._cellcam._tcp`, thread própria) + app com descoberta (mDNS com retry → fallback varredura de subrede), porta personalizável no `SignalingClient`, `CHANGE_WIFI_MULTICAST_STATE`, bind de sockets por `Network` (`ConnectivityManager`).
 - 2026-09-06 — **Cabo USB arquivado / WiFi definitivo**: diagnóstico provou que no Android 10 a rede `rndis0` só existe para apps com upstream (WiFi/dados móveis) e o libwebrtc não gera candidato ICE na interface USB com WiFi ativo. Digitação: mídia por cabo só com WiFi off + dados móveis on. Usuário decidiu manter WiFi como transporte da mídia; descoberta prioriza WiFi (rank 0).
 - 2026-09-06 — **Sala automática (sem digitar código)**: `GET /api/room` no signaling (sala de receiver ativo ou última criada), `room` no TXT do mDNS, e app conectando com IP e sala vazios (TXT → varredura → `/api/room`). Validado: `/api/room`=sala atual, TXT mDNS com `room=722385`.
+- 2026-09-06 — **Nova UI (ciano-tech)**: layout com título/subtítulo sci-fi, botão principal em accent, painéis "Dispositivos encontrados" (expansível, para >1 desktop) e "Avançado" (expansível, IP/sala manuais). Campos removidos da tela principal.

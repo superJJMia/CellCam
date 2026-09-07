@@ -3,13 +3,16 @@ package com.cellcam.app
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.cellcam.app.databinding.ActivityMainBinding
+import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -33,11 +36,16 @@ class MainActivity : AppCompatActivity() {
     private var mirrorEnabled = true
     private var rotateDegrees = 0
 
+    // Descoberta
+    private var deviceCandidates: List<MdnsServer> = emptyList()
+    private var advancedOpen = false
+    private var devicesOpen = false
+
     private val cameraPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            binding.statusText.text = "Câmera liberada. Deixe IP e sala vazios para descoberta automática."
+            binding.statusText.text = "Câmera liberada. A descoberta é automática."
             binding.connectButton.isEnabled = true
         } else {
             binding.statusText.text = "Permissão de câmera negada."
@@ -56,7 +64,7 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            binding.statusText.text = "Deixe IP e sala vazios para descoberta automática."
+            binding.statusText.text = "Tocando em CONECTAR, a descoberta é automática."
             binding.connectButton.isEnabled = true
         } else {
             cameraPermission.launch(Manifest.permission.CAMERA)
@@ -95,6 +103,29 @@ class MainActivity : AppCompatActivity() {
             rotateDegrees = (rotateDegrees + 90) % 360
             webRtc?.setRotate(rotateDegrees)
         }
+
+        binding.advancedHeader.setOnClickListener { toggleAdvanced() }
+        binding.devicesHeader.setOnClickListener { toggleDevices() }
+        binding.manualConnectButton.setOnClickListener {
+            binding.advancedPanel.visibility = View.GONE
+            advancedOpen = false
+            binding.advancedHeader.text = "AVANÇADO ▸"
+            startStreaming()
+        }
+    }
+
+    private fun toggleAdvanced() {
+        advancedOpen = !advancedOpen
+        binding.advancedPanel.visibility = if (advancedOpen) View.VISIBLE else View.GONE
+        binding.advancedHeader.text = if (advancedOpen) "AVANÇADO ▾" else "AVANÇADO ▸"
+    }
+
+    private fun toggleDevices() {
+        if (deviceCandidates.isEmpty()) return
+        devicesOpen = !devicesOpen
+        binding.deviceList.visibility = if (devicesOpen) View.VISIBLE else View.GONE
+        binding.devicesHeader.text =
+            if (devicesOpen) "DISPOSITIVOS ENCONTRADOS ▾" else "DISPOSITIVOS ENCONTRADOS ▸"
     }
 
     private fun startStreaming() {
@@ -109,7 +140,7 @@ class MainActivity : AppCompatActivity() {
         initiated = true
         retrying = false
         reconnectDelayMs = 1000L
-        binding.connectButton.text = "Parar"
+        binding.connectButton.text = "PARAR"
         binding.serverIpInput.isEnabled = false
         binding.roomCodeInput.isEnabled = false
         binding.cameraButton.isEnabled = true
@@ -141,9 +172,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Sem IP digitado, encontra o desktop via mDNS/varredura.
-     * A sala vem do desktop (publicada via mDNS ou GET /api/room); se o usuário
-     * digitou uma sala, ela prevalece.
+     * Sem IP digitado, descobre o desktop. Um único desktop conecta sozinho
+     * (com a sala do TXT mDNS ou /api/room); com vários, mostra uma lista
+     * expansível para o usuário escolher.
      */
     private fun discoverAndConnect(userRoom: String) {
         binding.statusText.text = "Procurando desktop na rede..."
@@ -156,32 +187,17 @@ class MainActivity : AppCompatActivity() {
         mdnsDiscovery?.start(
             onDiscovered = { servers ->
                 lifecycleScope.launch {
-                    var connected = false
-                    for (server in servers) {
-                        if (!initiated) return@launch
-                        val meio = if (server.preferWifi) "WiFi" else "cabo USB"
-                        binding.statusText.text = "Verificando ${server.ip} ($meio)..."
-                        if (tcpReachable(server.ip, server.port)) {
-                            var effectiveRoom = userRoom.ifEmpty { server.room.orEmpty() }
-                            if (effectiveRoom.isEmpty()) {
-                                effectiveRoom = withContext(Dispatchers.IO) {
-                                    MdnsDiscovery.fetchRoomDirect(server.ip)
-                                } ?: ""
-                            }
-                            if (!initiated) return@launch
-                            if (effectiveRoom.isEmpty()) {
-                                binding.statusText.text =
-                                    "Desktop encontrado, mas a sala não foi descoberta. Informe o código manualmente."
-                                return@launch
-                            }
-                            connected = true
-                            connectSignaling(server.ip, effectiveRoom, server.port)
-                            break
-                        }
-                    }
-                    if (!connected && initiated) {
+                    if (!initiated) return@launch
+                    val live = servers.filter { tcpReachable(it.ip, it.port) }
+                    if (live.isEmpty()) {
                         binding.statusText.text =
-                            "Nenhum desktop encontrado na rede. Digite o IP manualmente acima."
+                            "Nenhum desktop encontrado na rede. Toque em AVANÇADO para digitar IP."
+                        return@launch
+                    }
+                    if (live.size == 1) {
+                        connectTo(live.first(), userRoom)
+                    } else {
+                        showDeviceChooser(live, userRoom)
                     }
                 }
             },
@@ -191,6 +207,63 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         )
+    }
+
+    private fun showDeviceChooser(live: List<MdnsServer>, userRoom: String) {
+        deviceCandidates = live
+        binding.deviceList.removeAllViews()
+        for (server in live) {
+            val meio = if (server.preferWifi) "WIFI" else "CABO"
+            val label = server.name?.takeIf { it.isNotBlank() } ?: server.ip
+            val btn = MaterialButton(this).apply {
+                text = "$label  ·  $meio"
+                setTextColor(getColor(com.cellcam.app.R.color.accent))
+                textSize = 13f
+                letterSpacing = 0.08f
+                isAllCaps = true
+                background = getDrawable(com.cellcam.app.R.drawable.bg_panel_dark)
+                insetTop = 0
+                insetBottom = 0
+                isEnabled = true
+                setOnClickListener {
+                    pickDevice(server, userRoom)
+                }
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.setMargins(0, dp(1), 0, dp(1))
+            btn.layoutParams = lp
+            binding.deviceList.addView(btn)
+        }
+        binding.devicesHeader.visibility = View.VISIBLE
+        binding.devicesHeader.text = "DISPOSITIVOS ENCONTRADOS ▾"
+        devicesOpen = true
+        binding.deviceList.visibility = View.VISIBLE
+        binding.statusText.text = "${live.size} desktops encontrados. Escolha um:"
+        mdnsDiscovery?.stop()
+    }
+
+    private fun pickDevice(server: MdnsServer, userRoom: String) {
+        lifecycleScope.launch { connectTo(server, userRoom) }
+    }
+
+    private suspend fun connectTo(server: MdnsServer, userRoom: String) {
+        if (!initiated) return
+        var effectiveRoom = userRoom.ifEmpty { server.room.orEmpty() }
+        if (effectiveRoom.isEmpty()) {
+            effectiveRoom = withContext(Dispatchers.IO) {
+                MdnsDiscovery.fetchRoomDirect(server.ip)
+            } ?: ""
+        }
+        if (!initiated) return
+        if (effectiveRoom.isEmpty()) {
+            binding.statusText.text =
+                "Desktop encontrado, mas a sala não foi descoberta. Use AVANÇADO para informar."
+            return
+        }
+        connectSignaling(server.ip, effectiveRoom, server.port)
     }
 
     private suspend fun tcpReachable(ip: String, port: Int): Boolean =
@@ -329,8 +402,11 @@ class MainActivity : AppCompatActivity() {
     private fun showLocalPreview() {
         val track = webRtc?.localVideoTrack ?: return
         track.addSink(binding.localPreview)
-        binding.localPreview.visibility = android.view.View.VISIBLE
+        binding.localPreview.visibility = View.VISIBLE
     }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     private fun stopStreaming() {
         initiated = false
@@ -347,15 +423,20 @@ class MainActivity : AppCompatActivity() {
         eglBase?.release()
         eglBase = null
 
+        deviceCandidates = emptyList()
+        binding.deviceList.removeAllViews()
+        binding.devicesHeader.visibility = View.GONE
+        binding.deviceList.visibility = View.GONE
+
         binding.serverIpInput.isEnabled = true
         binding.roomCodeInput.isEnabled = true
         binding.cameraButton.isEnabled = false
         binding.mirrorButton.isEnabled = false
         binding.rotateButton.isEnabled = false
-        binding.connectButton.text = "Conectar e transmitir"
+        binding.connectButton.text = "CONECTAR E TRANSMITIR"
         binding.connectButton.isEnabled = true
-        binding.localPreview.visibility = android.view.View.GONE
-        binding.statusText.text = "Transmissão parada. Deixe IP e sala vazios para reconectar automaticamente."
+        binding.localPreview.visibility = View.GONE
+        binding.statusText.text = "Tocando em CONECTAR, a descoberta é automática."
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 

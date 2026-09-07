@@ -27,7 +27,8 @@ data class MdnsServer(
     val ip: String,
     val port: Int,
     val preferWifi: Boolean,
-    val room: String? = null
+    val room: String? = null,
+    val name: String? = null
 )
 
 private data class NetSubnet(
@@ -137,8 +138,11 @@ class MdnsDiscovery(private val context: Context) {
             val room = roomBytes
                 ?.let { String(it, Charsets.UTF_8) }
                 ?.takeIf { it.length == 6 }
+            val nameBytes = serviceInfo.attributes?.get("name")
+            val name = nameBytes?.let { String(it, Charsets.UTF_8) }?.takeIf { it.isNotBlank() }
             val key = "$ip:${serviceInfo.port}"
-            found[key] = MdnsServer(ip, serviceInfo.port, preferWifi = !isUsbHost(ip), room = room)
+            found[key] =
+                MdnsServer(ip, serviceInfo.port, preferWifi = !isUsbHost(ip), room = room, name = name)
             onDiscoveredCb?.invoke(prioritizeWifi(found.values.toList()))
         }
     }

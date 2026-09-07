@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/black"
+    android:background="@drawable/bg_app"
     android:keepScreenOn="true"
     tools:context=".MainActivity">
 
@@ -24,53 +24,163 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp"
-        android:background="@color/primary_dark"
+        android:background="@color/bg_panel"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/serverInputLayout"
+        <!-- Cabeçalho -->
+        <TextView
+            android:id="@+id/appTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="IP do servidor (opcional - deixa vazio para encontrar automático)"
-            app:boxBackgroundColor="@android:color/transparent"
-            app:hintTextColor="@android:color/white">
+            android:fontFamily="sans-serif-black"
+            android:letterSpacing="0.28"
+            android:text="CELLCAM"
+            android:textAllCaps="true"
+            android:textColor="@color/text"
+            android:textSize="24sp" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/serverIpInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="text"
-                android:textColor="@android:color/white"
-                android:singleLine="true" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/roomInputLayout"
+        <TextView
+            android:id="@+id/appSubtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Código da sala (opcional - automático pela descoberta)"
-            app:boxBackgroundColor="@android:color/transparent"
-            app:hintTextColor="@android:color/white">
+            android:layout_marginTop="2dp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.22"
+            android:text="PHONE → PC · WEBRTC · AUTO-DISCOVERY"
+            android:textAllCaps="true"
+            android:textColor="@color/accent"
+            android:textSize="10sp" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/roomCodeInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:maxLength="6"
-                android:textColor="@android:color/white"
-                android:singleLine="true" />
-        </com.google.android.material.textfield.TextInputLayout>
+        <!-- Status -->
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:minHeight="38dp"
+            android:text="Tocando em CONECTAR, a descoberta é automática."
+            android:textColor="@color/text_dim"
+            android:textSize="14sp"
+            android:fontFamily="monospace" />
 
+        <!-- Botão principal -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/connectButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Conectar e transmitir"
-            android:enabled="false" />
+            android:layout_height="56dp"
+            android:background="@drawable/bg_btn_primary"
+            android:letterSpacing="0.14"
+            android:text="CONECTAR E TRANSMITIR"
+            android:textAllCaps="true"
+            android:textColor="@color/bg"
+            android:textSize="15sp"
+            android:fontFamily="sans-serif-black"
+            android:textStyle="bold"
+            android:enabled="false"
+            app:backgroundTint="@null"
+            app:cornerRadius="2dp"
+            app:rippleColor="#22000000" />
 
+        <!-- Dispositivos encontrados (expansível) -->
+        <TextView
+            android:id="@+id/devicesHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_btn_outline"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:letterSpacing="0.16"
+            android:padding="10dp"
+            android:text="DISPOSITIVOS ENCONTRADOS ▸"
+            android:textAllCaps="true"
+            android:textColor="@color/accent"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/deviceList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <!-- Avançado (expansível) -->
+        <TextView
+            android:id="@+id/advancedHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_panel_dark"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:letterSpacing="0.16"
+            android:padding="10dp"
+            android:text="AVANÇADO ▸"
+            android:textAllCaps="true"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:id="@+id/advancedPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="8dp"
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/serverIpInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_input"
+                android:fontFamily="monospace"
+                android:hint="IP do servidor (vazio = automático)"
+                android:inputType="text"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textColorHint="@color/text_dim"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/roomCodeInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="monospace"
+                android:hint="Código da sala (vazio = automático)"
+                android:inputType="number"
+                android:maxLength="6"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textColorHint="@color/text_dim"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/manualConnectButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_btn_outline"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.12"
+                android:text="CONECTAR MANUALMENTE"
+                android:textAllCaps="true"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                app:backgroundTint="@null"
+                app:cornerRadius="2dp" />
+        </LinearLayout>
+
+        <!-- Controles da câmera -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -79,46 +189,55 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/cameraButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
-                android:text="Câmera"
-                android:textColor="@android:color/white"
-                android:enabled="false" />
+                android:background="@drawable/bg_panel_dark"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:text="CÂMERA"
+                android:textAllCaps="true"
+                android:textColor="@color/text"
+                android:textSize="12sp"
+                android:enabled="false"
+                app:backgroundTint="@null"
+                app:cornerRadius="2dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/rotateButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
-                android:text="Girar 90°"
-                android:textColor="@android:color/white"
-                android:enabled="false" />
+                android:background="@drawable/bg_panel_dark"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:text="GIRAR 90°"
+                android:textAllCaps="true"
+                android:textColor="@color/text"
+                android:textSize="12sp"
+                android:enabled="false"
+                app:backgroundTint="@null"
+                app:cornerRadius="2dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/mirrorButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Espelho"
-                android:textColor="@android:color/white"
-                android:enabled="false" />
+                android:background="@drawable/bg_panel_dark"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:text="ESPELHO"
+                android:textAllCaps="true"
+                android:textColor="@color/text"
+                android:textSize="12sp"
+                android:enabled="false"
+                app:backgroundTint="@null"
+                app:cornerRadius="2dp" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:text="Aguardando permissão de câmera..."
-            android:textColor="@android:color/white"
-            android:textSize="14sp" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
