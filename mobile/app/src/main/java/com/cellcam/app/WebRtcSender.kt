@@ -26,9 +26,13 @@ import org.webrtc.VideoTrack
  */
 class WebRtcSender(
     private val context: Context,
-    private val signaling: SignalingClient,
+    private var signaling: SignalingClient,
     private val eventListener: Listener
 ) {
+
+    fun setSignaling(client: SignalingClient) {
+        signaling = client
+    }
     interface Listener {
         fun onIceConnected()
         fun onIceDisconnected()
@@ -56,11 +60,39 @@ class WebRtcSender(
     @Volatile
     private var streaming = false
 
+    val isStreaming: Boolean
+        get() = streaming
+
     val localVideoTrack: VideoTrack?
         get() = videoTrack
 
     fun start() {
         initializeFactory()
+    }
+
+    fun switchCamera() {
+        val capturer = cameraCapturer ?: run {
+            eventListener.onError("Câmera não iniciada")
+            return
+        }
+        capturer.switchCamera(null)
+    }
+
+    /**
+     * Avisa o receiver (PC) para espelhar/desespelhar o fluxo de vídeo.
+     * O preview local continua sendo controlado pela view (SurfaceViewRenderer).
+     */
+    fun setMirror(enabled: Boolean) {
+        Log.i(TAG, "Enviando mirror=$enabled ao receiver")
+        signaling.sendSignal("mirror", JSONObject().put("mirror", enabled))
+    }
+
+    /**
+     * Pede ao receiver (PC) para girar o fluxo em multiplos de 90°.
+     */
+    fun setRotate(degrees: Int) {
+        Log.i(TAG, "Enviando rotate=${degrees}° ao receiver")
+        signaling.sendSignal("rotate", JSONObject().put("degrees", degrees))
     }
 
     private fun initializeFactory() {
@@ -112,6 +144,13 @@ class WebRtcSender(
     }
 
     fun createPeerConnection(onReady: () -> Unit) {
+        // Fecha uma sessão anterior antes de criar uma nova (reconexão)
+        runCatching {
+            peerConnection?.close()
+            peerConnection?.dispose()
+        }
+        peerConnection = null
+
         val config = PeerConnection.RTCConfiguration(ICE_SERVERS)
         config.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
 
@@ -119,10 +158,16 @@ class WebRtcSender(
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
                 Log.i(TAG, "ICE state: $state")
                 when (state) {
-                    PeerConnection.IceConnectionState.CONNECTED -> eventListener.onIceConnected()
+                    PeerConnection.IceConnectionState.CONNECTED -> {
+                        streaming = true
+                        eventListener.onIceConnected()
+                    }
                     PeerConnection.IceConnectionState.DISCONNECTED,
                     PeerConnection.IceConnectionState.FAILED,
-                    PeerConnection.IceConnectionState.CLOSED -> eventListener.onIceDisconnected()
+                    PeerConnection.IceConnectionState.CLOSED -> {
+                        streaming = false
+                        eventListener.onIceDisconnected()
+                    }
                     else -> {}
                 }
             }
@@ -221,16 +266,16 @@ class WebRtcSender(
         pc.addIceCandidate(candidate)
     }
 
-    fun stop() {
+fun stop() {
         streaming = false
         runCatching {
+            runCatching { peerConnection?.close() }
+            runCatching { peerConnection?.dispose() }
             cameraCapturer?.stopCapture()
             cameraCapturer?.dispose()
             videoSource?.dispose()
             videoTrack?.dispose()
             textureHelper?.dispose()
-            peerConnection?.close()
-            peerConnection?.dispose()
             factory?.dispose()
             eglBase.release()
             handlerThread.quitSafely()

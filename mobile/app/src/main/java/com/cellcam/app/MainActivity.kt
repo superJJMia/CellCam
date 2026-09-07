@@ -3,12 +3,17 @@ package com.cellcam.app
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.cellcam.app.databinding.ActivityMainBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.webrtc.EglBase
 import org.webrtc.RendererCommon
 import org.webrtc.VideoTrack
@@ -19,6 +24,14 @@ class MainActivity : AppCompatActivity() {
     private var signaling: SignalingClient? = null
     private var webRtc: WebRtcSender? = null
     private var eglBase: EglBase? = null
+    private var mdnsDiscovery: MdnsDiscovery? = null
+
+    // Estado da sessão
+    private var initiated = false
+    private var retrying = false
+    private var reconnectDelayMs = 1000L
+    private var mirrorEnabled = true
+    private var rotateDegrees = 0
 
     private val cameraPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -51,37 +64,126 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupPreview() {
+        if (eglBase != null) return
         eglBase = EglBase.create()
         binding.localPreview.init(eglBase!!.eglBaseContext, null)
         binding.localPreview.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-        binding.localPreview.setMirror(true)
+        binding.localPreview.setMirror(mirrorEnabled)
         binding.localPreview.setZOrderMediaOverlay(true)
     }
 
     private fun setupButtons() {
         binding.connectButton.setOnClickListener {
-            val ip = binding.serverIpInput.text.toString().trim()
-            val room = binding.roomCodeInput.text.toString().trim()
-
-            if (ip.isEmpty() || room.length != 6) {
-                Toast.makeText(this, "Informe o IP do servidor e um código de 6 dígitos", Toast.LENGTH_LONG).show()
-                return@setOnClickListener
+            if (initiated) {
+                stopStreaming()
+            } else {
+                startStreaming()
             }
+        }
 
-            startStreaming(ip, room)
+        binding.cameraButton.setOnClickListener {
+            webRtc?.switchCamera()
+        }
+
+        binding.mirrorButton.setOnClickListener {
+            mirrorEnabled = !mirrorEnabled
+            binding.localPreview.setMirror(mirrorEnabled)
+            webRtc?.setMirror(mirrorEnabled)
+        }
+
+        binding.rotateButton.setOnClickListener {
+            rotateDegrees = (rotateDegrees + 90) % 360
+            webRtc?.setRotate(rotateDegrees)
         }
     }
 
-    private fun startStreaming(ip: String, room: String) {
-        binding.connectButton.isEnabled = false
-        binding.statusText.text = "Conectando ao servidor $ip..."
+    private fun startStreaming() {
+        val ip = binding.serverIpInput.text.toString().trim()
+        val room = binding.roomCodeInput.text.toString().trim()
+
+        if (room.length != 6) {
+            Toast.makeText(this, "Informe um código de sala de 6 dígitos", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        initiated = true
+        retrying = false
+        reconnectDelayMs = 1000L
+        binding.connectButton.text = "Parar"
+        binding.serverIpInput.isEnabled = false
+        binding.roomCodeInput.isEnabled = false
+        binding.cameraButton.isEnabled = true
+        binding.mirrorButton.isEnabled = true
+        binding.rotateButton.isEnabled = true
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        if (ip.isEmpty()) {
+            discoverAndConnect(room)
+        } else {
+            binding.statusText.text = "Conectando ao servidor $ip..."
+            connectSignaling(ip, room)
+        }
+    }
+
+    /**
+     * Sem IP digitado, encontra o desktop via mDNS (WiFi ou cabo USB).
+     * O cabo é tentado primeiro; se não responder, cai para a rede WiFi.
+     */
+    private fun discoverAndConnect(room: String) {
+        binding.statusText.text = "Procurando desktop na rede..."
+        mdnsDiscovery = MdnsDiscovery(this)
+        mdnsDiscovery?.onStatusCb = { msg ->
+            runOnUiThread {
+                if (initiated) binding.statusText.text = msg
+            }
+        }
+        mdnsDiscovery?.start(
+            onDiscovered = { servers ->
+                lifecycleScope.launch {
+                    var connected = false
+                    for (server in servers) {
+                        if (!initiated) return@launch
+                        val meio = if (server.preferUsb) "cabo USB" else "WiFi"
+                        binding.statusText.text = "Verificando ${server.ip} ($meio)..."
+                        if (tcpReachable(server.ip, server.port)) {
+                            connected = true
+                            connectSignaling(server.ip, room, server.port)
+                            break
+                        }
+                    }
+                    if (!connected && initiated) {
+                        binding.statusText.text =
+                            "Nenhum desktop encontrado na rede. Digite o IP manualmente acima."
+                    }
+                }
+            },
+            onError = { msg ->
+                runOnUiThread {
+                    if (initiated) binding.statusText.text = msg
+                }
+            }
+        )
+    }
+
+    private suspend fun tcpReachable(ip: String, port: Int): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                java.net.Socket().use { it.connect(java.net.InetSocketAddress(ip, port), 700); true }
+            }.getOrDefault(false)
+        }
+
+    private fun connectSignaling(ip: String, room: String, port: Int = 8081) {
+        signaling?.close()
+        signaling = null
 
         signaling = SignalingClient(
             serverIp = ip,
             roomCode = room,
             scope = lifecycleScope,
+            port = port,
             listener = object : SignalingClient.Listener {
                 override fun onConnected() {
+                    retrying = false
                     runOnUiThread {
                         binding.statusText.text = "Conectado! Aguardando o PC (receiver)..."
                     }
@@ -107,23 +209,60 @@ class MainActivity : AppCompatActivity() {
                 override fun onError(message: String) {
                     runOnUiThread {
                         binding.statusText.text = "Erro: $message"
-                        binding.connectButton.isEnabled = true
                     }
+                    scheduleReconnectIfNeeded()
                 }
 
                 override fun onClosed() {
                     runOnUiThread {
                         binding.statusText.text = "Conexão com servidor encerrada."
-                        binding.connectButton.isEnabled = true
                     }
+                    scheduleReconnectIfNeeded()
                 }
             }
         )
         signaling?.connect()
     }
 
+    /**
+     * Tenta reconectar automaticamente com backoff (1s -> 2s -> ... -> 10s)
+     * enquanto a transmissão estiver iniciada.
+     */
+    private fun scheduleReconnectIfNeeded() {
+        if (!initiated) return
+        if (retrying) return
+        retrying = true
+
+        runOnUiThread {
+            binding.statusText.text = "Conexão perdida. Tentando reconectar em ${reconnectDelayMs / 1000}s..."
+        }
+
+        val ip = signaling?.serverIp ?: return
+        val room = signaling?.roomCode ?: return
+        val port = signaling?.port ?: 8081
+        lifecycleScope.launch {
+            delay(reconnectDelayMs)
+            retrying = false
+            reconnectDelayMs = (reconnectDelayMs * 2).coerceAtMost(10_000L)
+            if (!initiated) return@launch
+            connectSignaling(ip, room, port)
+        }
+    }
+
     private fun startWebRtc() {
-        if (webRtc != null) return
+        if (initiated.not()) return
+        setupPreview()
+
+        if (webRtc != null) {
+            // Sessão já existe: atualiza o signaling e renegocia (transmissão foi perdida)
+            webRtc?.setSignaling(signaling!!)
+            webRtc?.setMirror(mirrorEnabled)
+            webRtc?.setRotate(rotateDegrees)
+            webRtc?.createPeerConnection {
+                webRtc?.createOffer()
+            }
+            return
+        }
 
         webRtc = WebRtcSender(
             context = applicationContext,
@@ -151,6 +290,9 @@ class MainActivity : AppCompatActivity() {
         )
 
         webRtc?.start()
+        // Envia o estado de espelho/rotação para a sessão que acabou de conectar
+        webRtc?.setMirror(mirrorEnabled)
+        webRtc?.setRotate(rotateDegrees)
         webRtc?.createPeerConnection {
             webRtc?.createOffer()
         }
@@ -162,11 +304,47 @@ class MainActivity : AppCompatActivity() {
         binding.localPreview.visibility = android.view.View.VISIBLE
     }
 
+    private fun stopStreaming() {
+        initiated = false
+        retrying = false
+
+        signaling?.close()
+        signaling = null
+        mdnsDiscovery?.stop()
+        mdnsDiscovery = null
+        webRtc?.stop()
+        webRtc = null
+
+        runCatching { binding.localPreview.release() }
+        eglBase?.release()
+        eglBase = null
+
+        binding.serverIpInput.isEnabled = true
+        binding.roomCodeInput.isEnabled = true
+        binding.cameraButton.isEnabled = false
+        binding.mirrorButton.isEnabled = false
+        binding.rotateButton.isEnabled = false
+        binding.connectButton.text = "Conectar e transmitir"
+        binding.connectButton.isEnabled = true
+        binding.localPreview.visibility = android.view.View.GONE
+        binding.statusText.text = "Transmissão parada. Digite IP e código para reconectar."
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    override fun onBackPressed() {
+        if (initiated) {
+            stopStreaming()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        mdnsDiscovery?.stop()
         signaling?.close()
         webRtc?.stop()
-        binding.localPreview.release()
+        runCatching { binding.localPreview.release() }
         eglBase?.release()
     }
 }

@@ -107,6 +107,10 @@ async def run(args):
     if not args.no_server:
         proc = start_signaling()
 
+    from mdns_publisher import MdnsPublisher
+
+    mdns = MdnsPublisher(WS_PORT)
+    mdns.start()
     try:
         room = create_room() if args.room is None else args.room
     except Exception as e:
@@ -142,17 +146,29 @@ async def run(args):
 
     from receiver import Client
 
-    client = Client(f"ws://localhost:{WS_PORT}", room, backend=args.backend)
-    client.on_state = on_state
-    client.on_error = on_error
-
+    # Reconnect automatico do signaling (o app tambem reconecta do lado dele)
+    delay = 1.0
     try:
-        await client.run()
+        while True:
+            client = Client(f"ws://localhost:{WS_PORT}", room, backend=args.backend, fps=args.fps)
+            client.on_state = on_state
+            client.on_error = on_error
+            try:
+                await client.run()
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                raise
+            except Exception as e:
+                logger.warning("Conexao com signaling perdida (%s)", e)
+            finally:
+                if client.receiver is not None:
+                    await client.receiver.close()
+            logger.info("Tentando reconectar ao signaling em %.0fs...", delay)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 5)
     except KeyboardInterrupt:
         logger.info("Encerrando...")
     finally:
-        if client.receiver is not None:
-            await client.receiver.close()
+        mdns.stop()
         if proc:
             proc.terminate()
     return 0
@@ -168,6 +184,7 @@ def main():
     )
     parser.add_argument("--no-server", action="store_true", help="nao iniciar signaling local")
     parser.add_argument("--room", default=None, help="usar um codigo de sala especifico")
+    parser.add_argument("--fps", type=int, default=30, help="fps da webcam virtual (padrao: 30)")
     args = parser.parse_args()
     try:
         code = asyncio.run(run(args))

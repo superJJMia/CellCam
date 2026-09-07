@@ -17,6 +17,7 @@ mobile/local.properties
 # Logs e artefatos gerados em execução
 desktop/*.log
 desktop/qr.png
+mobile/build*.log
 
 # Pasta residual de desinstalação (removida no próximo boot)
 vendor_removing/

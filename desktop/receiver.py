@@ -23,8 +23,11 @@ class CameraBridge:
         self.fps = fps
         self.cam: pyvirtualcam.Camera | None = None
         self.frame_count = 0
+        self.mirror = False
 
     def send(self, frame: np.ndarray):
+        if self.mirror:
+            frame = frame[:, ::-1, :]
         if self.backend == "dry":
             self.frame_count += 1
             return
@@ -58,18 +61,27 @@ class CameraBridge:
 class Receiver:
     """Lado 'receiver' de uma sessao WebRTC (PC)."""
 
-    def __init__(self, signaling_send, backend: str = "obs"):
+    def __init__(self, signaling_send, backend: str = "obs", fps: int = 30):
         self.pc: RTCPeerConnection | None = None
         self._send = signaling_send  # async func(kind, payload)
         self._video_task: asyncio.Task | None = None
-        self.bridge = CameraBridge(backend=backend)
+        self.bridge = CameraBridge(backend=backend, fps=fps)
         self.on_state = lambda state: None
         self.on_error = lambda message: None
+        # Estado de transformacao (persistente entre sessoes do receptor)
+        self._mirror = False
+        self._rotate_steps = 0  # 0=0°, 1=90° (anti-horario), 2=180°, 3=270°
+        # Tamanho da webcam virtual: fixado no primeiro frame do processo.
+        # A partir daí a imagem e sempre enquadrada (letterbox) nesse tamanho,
+        # evitando que a webcam mude de resolucao "do nada".
+        self._target_size: tuple[int, int] | None = None
 
     async def handle_offer(self, data: dict):
         if self.pc is not None:
             logger.warning("Nova offer recebida; encerrando sessao anterior")
             await self._reset()
+
+        # NOTA: _target_size NAO e resetado aqui (mantem a resolucao da webcam).
 
         config = RTCConfiguration(
             iceServers=[
@@ -140,6 +152,8 @@ class Receiver:
                 break
             try:
                 img = frame.to_ndarray(format="rgb24")
+                img = self._apply_transform(img)
+                img = self._fit_letterbox(img)
                 self.bridge.send(img)
                 count += 1
                 if count % 30 == 0:
@@ -170,6 +184,63 @@ class Receiver:
         logger.info("ICE state: %s", state)
         self.on_state(state)
 
+    async def set_mirror(self, enabled: bool):
+        """Espelha/desespelha horizontalmente o fluxo injetado na webcam."""
+        enabled = bool(enabled)
+        if self._mirror == enabled:
+            return
+        self._mirror = enabled
+        self.bridge.mirror = enabled
+        logger.info("Espelho vertical (mirror) aplicado no fluxo" if enabled else "Espelho desativado")
+
+    async def set_rotate(self, degrees: int):
+        """Gira o fluxo em 90°, 180° ou 270° (antes do espelho)."""
+        steps = (int(degrees) % 360) // 90
+        if self._rotate_steps == steps:
+            return
+        self._rotate_steps = steps
+        logger.info("Rotacao aplicada: %d graus", steps * 90)
+
+    def _apply_transform(self, img: np.ndarray) -> np.ndarray:
+        # Espelho ANTES do giro: o PC replica o espelho visto no preview do app,
+        # e a rotacao e aplicada por cima (como o usuario gira apenas no PC).
+        if self._mirror:
+            img = img[:, ::-1, :]
+        if self._rotate_steps:
+            img = np.rot90(img, k=self._rotate_steps)
+        return img
+
+    def _fit_letterbox(self, img: np.ndarray) -> np.ndarray:
+        """Enquadra img no tamanho fixo da webcam preservando proporcao.
+
+        Se a resolucao da transmissao variar (encoder/giro), a imagem e
+        redimensionada mantendo o aspect ratio e centralizada num fundo preto,
+        de modo que a webcam virtual nunca mude de tamanho.
+        """
+        h, w = img.shape[:2]
+        if self._target_size is None:
+            self._target_size = (w, h)
+            logger.info("Resolucao da webcam fixada: %dx%d", w, h)
+            return img
+        tw, th = self._target_size
+        if w == tw and h == th:
+            return img
+
+        scale = min(tw / w, th / h)
+        nw = max(1, int(round(w * scale)))
+        nh = max(1, int(round(h * scale)))
+
+        from PIL import Image
+
+        pil = Image.fromarray(img)
+        if (nw, nh) != (w, h):
+            pil = pil.resize((nw, nh), Image.LANCZOS)
+
+        canvas = np.zeros((th, tw, 3), dtype=np.uint8)
+        x0, y0 = (tw - nw) // 2, (th - nh) // 2
+        canvas[y0:y0 + nh, x0:x0 + nw] = np.asarray(pil)
+        return canvas
+
     async def _reset(self):
         if self._video_task:
             self._video_task.cancel()
@@ -182,8 +253,9 @@ class Receiver:
             self.pc = None
         if self.bridge.frame_count:
             self.bridge.close()
-            # recria para aceitar nova resolucao na proxima sessao
-            self.bridge = CameraBridge(backend=self.bridge.backend)
+            # recria para a proxima sessao, preservando o estado de espelho
+            self.bridge = CameraBridge(backend=self.bridge.backend, fps=self.bridge.fps)
+            self.bridge.mirror = self._mirror
 
     async def close(self):
         await self._reset()
@@ -192,10 +264,11 @@ class Receiver:
 class Client:
     """Conecta ao servidor de sinalizacao como receiver e orquestra o Receiver."""
 
-    def __init__(self, ws_url, room_code, backend: str = "obs"):
+    def __init__(self, ws_url, room_code, backend: str = "obs", fps: int = 30):
         self.ws_url = ws_url
         self.room_code = room_code
         self.backend = backend
+        self.fps = fps
         self.receiver: Receiver | None = None
         self.on_state = lambda state: None
         self.on_error = lambda message: None
@@ -220,6 +293,7 @@ class Client:
             self.receiver = Receiver(
                 signaling_send=lambda kind, payload: self._send(ws, kind, payload),
                 backend=self.backend,
+                fps=self.fps,
             )
             self.receiver.on_state = self.on_state
             self.receiver.on_error = self.on_error
@@ -234,5 +308,9 @@ class Client:
                         await self.receiver.handle_offer({"sdp": data.get("sdp"), "type": "offer"})
                     elif kind == "ice":
                         await self.receiver.handle_ice(data)
+                    elif kind == "mirror":
+                        await self.receiver.set_mirror(data.get("mirror", False) is True)
+                    elif kind == "rotate":
+                        await self.receiver.set_rotate(data.get("degrees", 0))
                 elif mtype == "error":
                     self.on_error(msg.get("message", "erro"))

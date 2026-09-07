@@ -20,7 +20,8 @@ class SignalingClient(
     val serverIp: String,
     val roomCode: String,
     private val scope: CoroutineScope,
-    private val listener: Listener
+    private val listener: Listener,
+    val port: Int = 8081
 ) {
     interface Listener {
         fun onConnected()
@@ -39,7 +40,10 @@ class SignalingClient(
     private var job: Job? = null
 
     fun connect() {
-        val url = "ws://$serverIp:8081"
+        runCatching { ws?.cancel() }
+        ws = null
+
+        val url = "ws://$serverIp:$port"
         val request = Request.Builder().url(url).build()
         ws = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
