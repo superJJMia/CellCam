@@ -490,7 +490,12 @@ binding.statusText.text = "Basta tocar em CONECTAR."
 
         if (previewVisible) {
             binding.localPreview.visibility = View.VISIBLE
-            webRtc?.localVideoTrack?.addSink(binding.localPreview)
+            binding.root.post {
+                if (initiated) {
+                    binding.localPreview.visibility = View.VISIBLE
+                    webRtc?.localVideoTrack?.addSink(binding.localPreview)
+                }
+            }
         }
     }
 
