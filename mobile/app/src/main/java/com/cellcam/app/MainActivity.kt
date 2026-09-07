@@ -418,12 +418,9 @@ class MainActivity : AppCompatActivity() {
         signaling = null
         mdnsDiscovery?.stop()
         mdnsDiscovery = null
+        webRtc?.localVideoTrack?.removeSink(binding.localPreview)
         webRtc?.stop()
         webRtc = null
-
-        runCatching { binding.localPreview.release() }
-        eglBase?.release()
-        eglBase = null
 
         deviceCandidates = emptyList()
         binding.deviceList.removeAllViews()
@@ -437,6 +434,7 @@ class MainActivity : AppCompatActivity() {
         binding.rotateButton.isEnabled = false
         binding.connectButton.text = "CONECTAR E TRANSMITIR"
         binding.connectButton.isEnabled = true
+        binding.localPreview.clearImage()
         binding.localPreview.visibility = View.GONE
         binding.statusText.text = "Tocando em CONECTAR, a descoberta é automática."
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
