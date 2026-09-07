@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_app"
+    android:keepScreenOn="true"
+    tools:context=".MainActivity">
+
+    <org.webrtc.SurfaceViewRenderer
+        android:id="@+id/localPreview"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/controlPanel" />
+
+    <LinearLayout
+        android:id="@+id/controlPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:background="@color/bg_panel"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:gravity="start|center_vertical"
+                android:maxLines="1"
+                android:minHeight="32dp"
+                android:text="Basta tocar em CONECTAR."
+                android:textColor="@color/text_dim"
+                android:textSize="12sp"
+                android:fontFamily="monospace" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/connectButton"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_btn_primary"
+                android:letterSpacing="0.06"
+                android:text="CONECTAR E TRANSMITIR"
+                android:textAllCaps="true"
+                android:textColor="@color/bg"
+                android:textSize="11sp"
+                android:fontFamily="sans-serif-black"
+                android:textStyle="bold"
+                android:enabled="false"
+                app:backgroundTint="@null"
+                app:cornerRadius="2dp"
+                app:rippleColor="#22000000" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/cameraButton"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_panel_dark"
+                android:contentDescription="Câmera"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_camera"
+                android:tint="@color/btn_icon"
+                android:enabled="false" />
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/rotateButton"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_panel_dark"
+                android:contentDescription="Girar 90 graus"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_rotate"
+                android:tint="@color/btn_icon"
+                android:enabled="false" />
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/mirrorButton"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_panel_dark"
+                android:contentDescription="Espelho"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_mirror"
+                android:tint="@color/btn_icon"
+                android:enabled="false" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/devicesHeader"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_btn_outline"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:letterSpacing="0.12"
+                android:padding="6dp"
+                android:text="DISPOSITIVOS ENCONTRADOS ▸"
+                android:textAllCaps="true"
+                android:textColor="@color/accent"
+                android:textSize="10sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/advancedHeader"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_panel_dark"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:letterSpacing="0.12"
+                android:padding="6dp"
+                android:text="AVANÇADO ▸"
+                android:textAllCaps="true"
+                android:textColor="@color/text_dim"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/deviceList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/advancedPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="6dp"
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/serverIpInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_input"
+                android:fontFamily="monospace"
+                android:hint="IP do servidor (vazio = automático)"
+                android:inputType="text"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textColorHint="@color/text_dim"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/roomCodeInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="monospace"
+                android:hint="Código da sala (vazio = automático)"
+                android:inputType="number"
+                android:maxLength="6"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textColorHint="@color/text_dim"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/manualConnectButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_btn_outline"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:text="CONECTAR MANUALMENTE"
+                android:textAllCaps="true"
+                android:textColor="@color/accent"
+                android:textSize="11sp"
+                app:backgroundTint="@null"
+                app:cornerRadius="2dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

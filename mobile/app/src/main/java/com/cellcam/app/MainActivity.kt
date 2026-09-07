@@ -2,6 +2,7 @@ package com.cellcam.app
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
@@ -38,6 +39,7 @@ class MainActivity : AppCompatActivity() {
 
     // Descoberta
     private var deviceCandidates: List<MdnsServer> = emptyList()
+    private var pendingUserRoom = ""
     private var advancedOpen = false
     private var devicesOpen = false
 
@@ -74,6 +76,10 @@ binding.statusText.text = "Basta tocar em CONECTAR."
     private fun setupPreview() {
         if (eglBase != null) return
         eglBase = EglBase.create()
+        initLocalPreview()
+    }
+
+    private fun initLocalPreview() {
         binding.localPreview.init(eglBase!!.eglBaseContext, null)
         binding.localPreview.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
         binding.localPreview.setMirror(mirrorEnabled)
@@ -211,8 +217,19 @@ binding.statusText.text = "Basta tocar em CONECTAR."
 
     private fun showDeviceChooser(live: List<MdnsServer>, userRoom: String) {
         deviceCandidates = live
+        pendingUserRoom = userRoom
+        rebuildDeviceList()
+        binding.devicesHeader.visibility = View.VISIBLE
+        binding.devicesHeader.text = "DISPOSITIVOS ENCONTRADOS ▾"
+        devicesOpen = true
+        binding.deviceList.visibility = View.VISIBLE
+        binding.statusText.text = "${live.size} desktops encontrados. Escolha um:"
+        mdnsDiscovery?.stop()
+    }
+
+    private fun rebuildDeviceList() {
         binding.deviceList.removeAllViews()
-        for (server in live) {
+        for (server in deviceCandidates) {
             val meio = if (server.preferWifi) "WIFI" else "CABO"
             val label = server.name?.takeIf { it.isNotBlank() } ?: server.ip
             val btn = MaterialButton(this).apply {
@@ -226,7 +243,7 @@ binding.statusText.text = "Basta tocar em CONECTAR."
                 insetBottom = 0
                 isEnabled = true
                 setOnClickListener {
-                    pickDevice(server, userRoom)
+                    pickDevice(server, pendingUserRoom)
                 }
             }
             val lp = LinearLayout.LayoutParams(
@@ -237,12 +254,6 @@ binding.statusText.text = "Basta tocar em CONECTAR."
             btn.layoutParams = lp
             binding.deviceList.addView(btn)
         }
-        binding.devicesHeader.visibility = View.VISIBLE
-        binding.devicesHeader.text = "DISPOSITIVOS ENCONTRADOS ▾"
-        devicesOpen = true
-        binding.deviceList.visibility = View.VISIBLE
-        binding.statusText.text = "${live.size} desktops encontrados. Escolha um:"
-        mdnsDiscovery?.stop()
     }
 
     private fun pickDevice(server: MdnsServer, userRoom: String) {
@@ -438,6 +449,49 @@ binding.statusText.text = "Basta tocar em CONECTAR."
         binding.localPreview.visibility = View.GONE
         binding.statusText.text = "Tocando em CONECTAR, a descoberta é automática."
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val ip = binding.serverIpInput.text.toString()
+        val room = binding.roomCodeInput.text.toString()
+        val status = binding.statusText.text.toString()
+        val previewVisible = initiated && binding.localPreview.visibility == View.VISIBLE
+        runCatching { binding.localPreview.release() }
+
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        setupButtons()
+        initLocalPreview()
+
+        binding.statusText.text = status
+        binding.serverIpInput.setText(ip)
+        binding.roomCodeInput.setText(room)
+        binding.connectButton.text = if (initiated) "PARAR" else "CONECTAR E TRANSMITIR"
+        binding.connectButton.isEnabled = true
+        binding.serverIpInput.isEnabled = !initiated
+        binding.roomCodeInput.isEnabled = !initiated
+        binding.cameraButton.isEnabled = initiated
+        binding.mirrorButton.isEnabled = initiated
+        binding.rotateButton.isEnabled = initiated
+        binding.advancedHeader.text = if (advancedOpen) "AVANÇADO ▾" else "AVANÇADO ▸"
+        binding.advancedPanel.visibility = if (advancedOpen) View.VISIBLE else View.GONE
+        if (deviceCandidates.isNotEmpty()) {
+            rebuildDeviceList()
+            binding.devicesHeader.visibility = View.VISIBLE
+            binding.devicesHeader.text =
+                if (devicesOpen) "DISPOSITIVOS ENCONTRADOS ▾" else "DISPOSITIVOS ENCONTRADOS ▸"
+            binding.deviceList.visibility = if (devicesOpen) View.VISIBLE else View.GONE
+        } else {
+            binding.devicesHeader.visibility = View.GONE
+            binding.deviceList.visibility = View.GONE
+        }
+        if (initiated) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        if (previewVisible) {
+            binding.localPreview.visibility = View.VISIBLE
+            webRtc?.localVideoTrack?.addSink(binding.localPreview)
+        }
     }
 
     override fun onBackPressed() {
