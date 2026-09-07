@@ -293,8 +293,8 @@ class MainActivity : AppCompatActivity() {
                 override fun onPeerJoined() {
                     runOnUiThread {
                         binding.statusText.text = "PC conectado! Iniciando WebRTC..."
+                        startWebRtc()
                     }
-                    startWebRtc()
                 }
 
                 override fun onPeerLeft() {
@@ -355,7 +355,9 @@ class MainActivity : AppCompatActivity() {
         setupPreview()
 
         if (webRtc != null) {
-            // Sessão já existe: atualiza o signaling e renegocia (transmissão foi perdida)
+            if (webRtc?.isStreaming == true) {
+                return
+            }
             webRtc?.setSignaling(signaling!!)
             webRtc?.setMirror(mirrorEnabled)
             webRtc?.setRotate(rotateDegrees)
