@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -62,6 +64,7 @@ class MainActivity : AppCompatActivity() {
 
         setupPreview()
         setupButtons()
+        applyOrientationLayout()
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
@@ -447,56 +450,28 @@ binding.statusText.text = "Basta tocar em CONECTAR."
         binding.connectButton.isEnabled = true
         binding.localPreview.clearImage()
         binding.localPreview.visibility = View.GONE
-        binding.statusText.text = "Tocando em CONECTAR, a descoberta é automática."
+        binding.statusText.text = "Basta tocar em CONECTAR."
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        val ip = binding.serverIpInput.text.toString()
-        val room = binding.roomCodeInput.text.toString()
-        val status = binding.statusText.text.toString()
-        val previewVisible = initiated && binding.localPreview.visibility == View.VISIBLE
-        runCatching { binding.localPreview.release() }
+        applyOrientationLayout()
+    }
 
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        setupButtons()
-        initLocalPreview()
-
-        binding.statusText.text = status
-        binding.serverIpInput.setText(ip)
-        binding.roomCodeInput.setText(room)
-        binding.connectButton.text = if (initiated) "PARAR" else "CONECTAR E TRANSMITIR"
-        binding.connectButton.isEnabled = true
-        binding.serverIpInput.isEnabled = !initiated
-        binding.roomCodeInput.isEnabled = !initiated
-        binding.cameraButton.isEnabled = initiated
-        binding.mirrorButton.isEnabled = initiated
-        binding.rotateButton.isEnabled = initiated
-        binding.advancedHeader.text = if (advancedOpen) "AVANÇADO ▾" else "AVANÇADO ▸"
-        binding.advancedPanel.visibility = if (advancedOpen) View.VISIBLE else View.GONE
-        if (deviceCandidates.isNotEmpty()) {
-            rebuildDeviceList()
-            binding.devicesHeader.visibility = View.VISIBLE
-            binding.devicesHeader.text =
-                if (devicesOpen) "DISPOSITIVOS ENCONTRADOS ▾" else "DISPOSITIVOS ENCONTRADOS ▸"
-            binding.deviceList.visibility = if (devicesOpen) View.VISIBLE else View.GONE
+    private fun applyOrientationLayout() {
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val lp = binding.controlPanel.layoutParams as FrameLayout.LayoutParams
+        if (landscape) {
+            lp.width = dp(230)
+            lp.height = FrameLayout.LayoutParams.MATCH_PARENT
+            lp.gravity = Gravity.END or Gravity.CENTER_VERTICAL
         } else {
-            binding.devicesHeader.visibility = View.GONE
-            binding.deviceList.visibility = View.GONE
+            lp.width = FrameLayout.LayoutParams.MATCH_PARENT
+            lp.height = FrameLayout.LayoutParams.WRAP_CONTENT
+            lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         }
-        if (initiated) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        if (previewVisible) {
-            binding.localPreview.visibility = View.VISIBLE
-            binding.root.post {
-                if (initiated) {
-                    binding.localPreview.visibility = View.VISIBLE
-                    webRtc?.localVideoTrack?.addSink(binding.localPreview)
-                }
-            }
-        }
+        binding.controlPanel.layoutParams = lp
     }
 
     override fun onBackPressed() {
