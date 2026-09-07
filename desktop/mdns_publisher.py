@@ -38,8 +38,9 @@ def get_ipv4_addresses() -> list[str]:
 
 
 class MdnsPublisher:
-    def __init__(self, port: int):
+    def __init__(self, port: int, room: str | None = None):
         self.port = port
+        self.room = room
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
 
@@ -71,7 +72,7 @@ class MdnsPublisher:
                 SERVICE,
                 port=self.port,
                 addresses=[socket.inet_aton(ip) for ip in get_ipv4_addresses()],
-                properties={"name": "CellCam Desktop"},
+                properties={"name": "CellCam Desktop", "room": self.room or ""},
             )
             await zc.async_register_service(info)
             ips = ", ".join(get_ipv4_addresses())

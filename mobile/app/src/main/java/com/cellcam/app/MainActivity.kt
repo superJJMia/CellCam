@@ -37,7 +37,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            binding.statusText.text = "Câmera liberada. Digite IP e código para conectar."
+            binding.statusText.text = "Câmera liberada. Deixe IP e sala vazios para descoberta automática."
             binding.connectButton.isEnabled = true
         } else {
             binding.statusText.text = "Permissão de câmera negada."
@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            binding.statusText.text = "Digite o IP do servidor e o código da sala."
+            binding.statusText.text = "Deixe IP e sala vazios para descoberta automática."
             binding.connectButton.isEnabled = true
         } else {
             cameraPermission.launch(Manifest.permission.CAMERA)
@@ -101,8 +101,8 @@ class MainActivity : AppCompatActivity() {
         val ip = binding.serverIpInput.text.toString().trim()
         val room = binding.roomCodeInput.text.toString().trim()
 
-        if (room.length != 6) {
-            Toast.makeText(this, "Informe um código de sala de 6 dígitos", Toast.LENGTH_LONG).show()
+        if (room.isNotEmpty() && room.length != 6) {
+            Toast.makeText(this, "Informe um código de sala de 6 dígitos (ou deixe vazio)", Toast.LENGTH_LONG).show()
             return
         }
 
@@ -121,15 +121,31 @@ class MainActivity : AppCompatActivity() {
             discoverAndConnect(room)
         } else {
             binding.statusText.text = "Conectando ao servidor $ip..."
-            connectSignaling(ip, room)
+            lifecycleScope.launch {
+                var effectiveRoom = room
+                if (effectiveRoom.isEmpty()) {
+                    effectiveRoom = withContext(Dispatchers.IO) {
+                        MdnsDiscovery.fetchRoomDirect(ip)
+                    } ?: ""
+                }
+                if (!initiated) return@launch
+                if (effectiveRoom.isEmpty()) {
+                    binding.statusText.text =
+                        "Não encontrei a sala automaticamente. Informe o código da sala."
+                    stopStreaming()
+                    return@launch
+                }
+                connectSignaling(ip, effectiveRoom)
+            }
         }
     }
 
     /**
-     * Sem IP digitado, encontra o desktop via mDNS (WiFi ou cabo USB).
-     * O cabo é tentado primeiro; se não responder, cai para a rede WiFi.
+     * Sem IP digitado, encontra o desktop via mDNS/varredura.
+     * A sala vem do desktop (publicada via mDNS ou GET /api/room); se o usuário
+     * digitou uma sala, ela prevalece.
      */
-    private fun discoverAndConnect(room: String) {
+    private fun discoverAndConnect(userRoom: String) {
         binding.statusText.text = "Procurando desktop na rede..."
         mdnsDiscovery = MdnsDiscovery(this)
         mdnsDiscovery?.onStatusCb = { msg ->
@@ -146,8 +162,20 @@ class MainActivity : AppCompatActivity() {
                         val meio = if (server.preferWifi) "WiFi" else "cabo USB"
                         binding.statusText.text = "Verificando ${server.ip} ($meio)..."
                         if (tcpReachable(server.ip, server.port)) {
+                            var effectiveRoom = userRoom.ifEmpty { server.room.orEmpty() }
+                            if (effectiveRoom.isEmpty()) {
+                                effectiveRoom = withContext(Dispatchers.IO) {
+                                    MdnsDiscovery.fetchRoomDirect(server.ip)
+                                } ?: ""
+                            }
+                            if (!initiated) return@launch
+                            if (effectiveRoom.isEmpty()) {
+                                binding.statusText.text =
+                                    "Desktop encontrado, mas a sala não foi descoberta. Informe o código manualmente."
+                                return@launch
+                            }
                             connected = true
-                            connectSignaling(server.ip, room, server.port)
+                            connectSignaling(server.ip, effectiveRoom, server.port)
                             break
                         }
                     }
@@ -327,7 +355,7 @@ class MainActivity : AppCompatActivity() {
         binding.connectButton.text = "Conectar e transmitir"
         binding.connectButton.isEnabled = true
         binding.localPreview.visibility = android.view.View.GONE
-        binding.statusText.text = "Transmissão parada. Digite IP e código para reconectar."
+        binding.statusText.text = "Transmissão parada. Deixe IP e sala vazios para reconectar automaticamente."
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 

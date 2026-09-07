@@ -28,6 +28,14 @@ function get(path) {
     console.error('FALHA: roomCode não tem 6 dígitos');
     process.exit(1);
   }
+
+  const apiRoom = await get('/api/room');
+  console.log('/api/room =>', apiRoom.status, apiRoom.body);
+  const apiParsed = JSON.parse(apiRoom.body);
+  if (apiParsed.roomCode !== parsed.roomCode) {
+    console.error('FALHA: /api/room não retornou a última sala criada');
+    process.exit(1);
+  }
   console.log('OK');
 })().catch((e) => {
   console.error('Erro:', e.message);

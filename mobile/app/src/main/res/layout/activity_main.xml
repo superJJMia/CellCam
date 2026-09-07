@@ -50,7 +50,7 @@
             android:id="@+id/roomInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Código da sala (6 dígitos)"
+            android:hint="Código da sala (opcional - automático pela descoberta)"
             app:boxBackgroundColor="@android:color/transparent"
             app:hintTextColor="@android:color/white">
 

@@ -109,13 +109,14 @@ async def run(args):
 
     from mdns_publisher import MdnsPublisher
 
-    mdns = MdnsPublisher(WS_PORT)
-    mdns.start()
     try:
         room = create_room() if args.room is None else args.room
     except Exception as e:
         logger.error("Nao consegui criar sala: %s", e)
         return 1
+
+    mdns = MdnsPublisher(WS_PORT, room)
+    mdns.start()
 
     ip = get_lan_ip()
     logger.info("=" * 56)
@@ -127,9 +128,9 @@ async def run(args):
     print()
     print_qr(f"cellcam:{ip}:{room}", filename=os.path.join(os.path.dirname(__file__), "qr.png"))
     print()
-    print("No celular (app CellCam), informe:")
-    print(f"   IP: {ip}")
-    print(f"   Codigo: {room}")
+    print("No celular (app CellCam):")
+    print(f"   Deixe IP e código em branco -> descoberta automatica (sala {room})")
+    print(f"   Ou use manualmente: IP: {ip} / Codigo: {room}")
     print("Depois toque em 'Conectar e transmitir'.")
     print()
 

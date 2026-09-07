@@ -21,8 +21,14 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.InetSocketAddress
 import java.net.Socket
+import org.json.JSONObject
 
-data class MdnsServer(val ip: String, val port: Int, val preferWifi: Boolean)
+data class MdnsServer(
+    val ip: String,
+    val port: Int,
+    val preferWifi: Boolean,
+    val room: String? = null
+)
 
 private data class NetSubnet(
     val network: Network,
@@ -127,8 +133,12 @@ class MdnsDiscovery(private val context: Context) {
         override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
             val ip = serviceInfo.host?.hostAddress ?: return
             if (ip == "0.0.0.0") return
+            val roomBytes = serviceInfo.attributes?.get("room")
+            val room = roomBytes
+                ?.let { String(it, Charsets.UTF_8) }
+                ?.takeIf { it.length == 6 }
             val key = "$ip:${serviceInfo.port}"
-            found[key] = MdnsServer(ip, serviceInfo.port, preferWifi = !isUsbHost(ip))
+            found[key] = MdnsServer(ip, serviceInfo.port, preferWifi = !isUsbHost(ip), room = room)
             onDiscoveredCb?.invoke(prioritizeWifi(found.values.toList()))
         }
     }
@@ -217,7 +227,8 @@ class MdnsDiscovery(private val context: Context) {
                         if (foundServer != null) return@withPermit
                         val ip = ipAt(subnet.base, subnet.prefix, offset)
                         if (tcpOpen(subnet.network, ip)) {
-                            foundServer = MdnsServer(ip, SERVER_PORT_DEFAULT, subnet.isUsb)
+                            val room = httpRoom(subnet.network, ip)
+                            foundServer = MdnsServer(ip, SERVER_PORT_DEFAULT, subnet.isUsb.not(), room)
                         }
                     }
                 }
@@ -247,6 +258,16 @@ class MdnsDiscovery(private val context: Context) {
         }
     } catch (_: Exception) {
         false
+    }
+
+    /** GET /api/room vinculado à rede (varredura de subrede). */
+    private fun httpRoom(network: Network, ip: String): String? = try {
+        Socket().use { socket ->
+            network.bindSocket(socket)
+            httpRoomRequest(socket, ip)
+        }
+    } catch (_: Exception) {
+        null
     }
 
     private fun ipv4ToLong(ip: ByteArray): Long =
@@ -307,6 +328,34 @@ class MdnsDiscovery(private val context: Context) {
         private const val SCAN_PARALLELISM = 40
         private const val TCP_TIMEOUT_MS = 200
         private const val SERVER_PORT_DEFAULT = 8081
+        private const val HTTP_PORT_DEFAULT = 8080
         private const val FAILURE_INTERNAL_ERROR = 0
+
+        /** Sala do signaling do desktop (GET /api/room) via rede padrão (IP manual). */
+        fun fetchRoomDirect(ip: String): String? = try {
+            Socket().use { socket -> httpRoomRequest(socket, ip) }
+        } catch (_: Exception) {
+            null
+        }
+
+        private fun httpRoomRequest(socket: Socket, ip: String): String? {
+            socket.connect(InetSocketAddress(ip, HTTP_PORT_DEFAULT), TCP_TIMEOUT_MS * 3)
+            socket.soTimeout = TCP_TIMEOUT_MS * 3
+            val output = socket.getOutputStream()
+            output.write("GET /api/room HTTP/1.0\r\nHost: $ip\r\n\r\n".toByteArray(Charsets.UTF_8))
+            output.flush()
+            val input = socket.getInputStream()
+            val body = StringBuilder()
+            val buf = ByteArray(1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                body.append(String(buf, 0, n, Charsets.UTF_8))
+                if (n < buf.size) break
+            }
+            val headerEnd = body.indexOf("\r\n\r\n")
+            val json = if (headerEnd >= 0) body.substring(headerEnd + 4) else body.toString()
+            return JSONObject(json).optString("roomCode").takeIf { it.length == 6 }
+        }
     }
 }

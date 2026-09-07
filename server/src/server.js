@@ -12,6 +12,7 @@ function createRoomCode() {
 class SignalingServer {
   constructor() {
     this.rooms = new Map(); // roomCode -> Map<role, ws>
+    this.lastRoom = null;   // última sala criada (para auto-descoberta do app)
   }
 
   join(ws, { roomCode, role }) {
@@ -101,8 +102,26 @@ const httpServer = http.createServer((req, res) => {
   if (req.url === '/room') {
     const code = createRoomCode();
     server.rooms.set(code, new Map());
+    server.lastRoom = code;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ roomCode: code }));
+    return;
+  }
+  if (req.url === '/api/room') {
+    // Sala que o app deve usar: preferindo uma sala com receiver ativo,
+    // senão a última sala criada.
+    let roomCode = null;
+    for (const [code, room] of server.rooms) {
+      if (room.has('receiver')) { roomCode = code; break; }
+    }
+    if (!roomCode) roomCode = server.lastRoom;
+    if (!roomCode) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'no room yet' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ roomCode }));
     return;
   }
   res.writeHead(404);

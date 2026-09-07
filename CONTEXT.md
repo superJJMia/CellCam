@@ -10,7 +10,7 @@
 - **Controles no app**: Parar/Conectar, trocar câmera, **Espelho**, **Girar 90°** (aplicado no PC; preview do celular só espelha, por decisão do usuário).
 - **Reconexão automática** dos dois lados (app e receiver) com backoff.
 - **Qualidade de vídeo estável**: webcam virtual com tamanho fixo (letterbox); não muda mais de resolução sem aviso.
-- **Auto-descoberta**: o desktop publica `cellcam._cellcam._tcp` (mDNS/zeroconf); o app encontra o PC por WiFi (transporto principal da mídia) sem digitar IP (com fallback de varredura de subrede — o NsdManager do moto G7 está com bug).
+- **Auto-descoberta**: o desktop publica `cellcam._cellcam._tcp` (mDNS/zeroconf) com o **código da sala no TXT**; o app encontra o PC por WiFi (transporte principal da mídia) sem digitar IP **nem código** (fallback de varredura de subrede + `GET /api/room` — o NsdManager do moto G7 está com bug).
 
 ## Decisões técnicas
 - Transporte: WebRTC/H.264 (aiortc 1.15.0 + libwebrtc Android M137).
@@ -20,6 +20,7 @@
 - Controles via signaling: mensagens `kind: "mirror"` (bool) e `kind: "rotate"` (graus, múltiplo de 90). Receiver aplica **espelho antes do giro** (`_apply_transform`) — espelho=reflexão, giro=rotação (não são equivalentes; mantido ambos por escolha do usuário).
 - Estabilização de dimensão no receiver: `_target_size` fixado no primeiro frame e **mantido entre sessões do mesmo processo**; `_fit_letterbox` (Pillow LANCZOS + canvas) redimensiona sem distorcer — a resolução da webcam virtual nunca muda durante a operação.
 - Estado de espelho persistente no receiver (`self._mirror`), preservado ao recriar a `CameraBridge` (evita dessincronização com o app).
+- **Sala automática (sem digitar código)**: `server.js` ganhou `GET /api/room` (retorna a sala de um receiver ativo, senão a última criada); `mdns_publisher` publica `room` no TXT do mDNS. No app, IP e sala vazios = descoberta completa: a sala vem do TXT (mDNS) ou do `/api/room` (varredura). Sala digitada pelo usuário prevalece.
 - mDNS desktop: `zeroconf` + `psutil` em **thread própria** (o `register_service` síncrono do zeroconf 0.151 conflita com o event loop principal → `EventLoopBlocked`; por isso `asyncio.run` em thread dedicada com APIs async).
 - Descoberta Android: preferência **WiFi primeiro** (transporte definitivo da mídia), depois cabo USB/rede móvel. Detecção com **bind dos sockets à `Network`** coletada via `ConnectivityManager.allNetworks` (necessário quando a rede não é a "default"). Campo de IP manual continua funcionando (ex.: `192.168.0.119`).
 - **Cabo USB arquivado** (decisão do usuário): o Android 10 (moto G7) só registra a rede `rndis0` no `ConnectivityManager` quando o tethering tem um **upstream** (WiFi ou dados móveis); sem ele, o app vê "nenhuma rede ativa". Com WiFi ativo, o libwebrtc não expõe a interface `rndis0` como candidato ICE → a mídia obrigatoriamente vai por WiFi. Conclusão: cabo demandaria WiFi off + dados móveis on; o usuário optou por manter WiFi como transporte e arquivar o cabo.
@@ -52,3 +53,4 @@
 - 2026-09-06 — **Lapidação Fase 1** (a commitar): UX do app (Parar, trocar câmera, espelho, girar, manter tela ativa), reconexão automática com backoff (1s→10s) + renegociação WebRTC, espelho e giro E2E via signaling (espelho antes do giro), resolução da webcam fixa (letterbox), tamanho nunca muda, start.cmd e README.
 - 2026-09-06 — **Auto-descoberta do desktop** (commitado junto): mDNS (zeroconf `cellcam._cellcam._tcp`, thread própria) + app com descoberta (mDNS com retry → fallback varredura de subrede), porta personalizável no `SignalingClient`, `CHANGE_WIFI_MULTICAST_STATE`, bind de sockets por `Network` (`ConnectivityManager`).
 - 2026-09-06 — **Cabo USB arquivado / WiFi definitivo**: diagnóstico provou que no Android 10 a rede `rndis0` só existe para apps com upstream (WiFi/dados móveis) e o libwebrtc não gera candidato ICE na interface USB com WiFi ativo. Digitação: mídia por cabo só com WiFi off + dados móveis on. Usuário decidiu manter WiFi como transporte da mídia; descoberta prioriza WiFi (rank 0).
+- 2026-09-06 — **Sala automática (sem digitar código)**: `GET /api/room` no signaling (sala de receiver ativo ou última criada), `room` no TXT do mDNS, e app conectando com IP e sala vazios (TXT → varredura → `/api/room`). Validado: `/api/room`=sala atual, TXT mDNS com `room=722385`.
